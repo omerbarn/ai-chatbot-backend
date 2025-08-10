@@ -17,6 +17,8 @@ const {
   CHAT_LIMIT = 2
 } = process.env;
 
+console.log("Starting Gemini chatbot backend...");
+
 // SQLite setup
 const db = new Database('rag_store.db');
 db.exec(`
