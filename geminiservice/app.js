@@ -173,6 +173,7 @@ app.post('/add-doc', async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT || 4000, () => {
-  console.log('Gemini chatbot backend running');
+const port = process.env.PORT || 4000;
+app.listen(port, () => {
+  console.log(`Gemini chatbot backend running on port ${port}`);
 });
