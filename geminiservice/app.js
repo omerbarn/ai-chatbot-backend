@@ -17,6 +17,7 @@ const {
   CHAT_LIMIT = 2
 } = process.env;
 
+// SQLite setup
 const db = new Database('rag_store.db');
 db.exec(`
 CREATE TABLE IF NOT EXISTS documents (
@@ -43,18 +44,27 @@ async function getAuthHeaders() {
   };
 }
 
+// Get embedding from Gemini embedding model
 async function embedText(text) {
-  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${EMBEDDING_MODEL}:embedText`;
+  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${EMBEDDING_MODEL}:predict`;
   const headers = await getAuthHeaders();
   const res = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ instances: [{ content: text }] })
+    body: JSON.stringify({
+      instances: [{ content: text }]
+    })
   });
+
   const data = await res.json();
+  if (!data?.predictions?.[0]?.embedding) {
+    console.error("Embedding error:", data);
+    throw new Error("Failed to generate embedding");
+  }
   return data.predictions[0].embedding;
 }
 
+// Cosine similarity function
 function cosineSim(a, b) {
   let dot = 0, normA = 0, normB = 0;
   for (let i = 0; i < a.length; i++) {
@@ -80,19 +90,25 @@ async function retrieveRelevant(query, k = TOP_K) {
   }).sort((a, b) => b.score - a.score).slice(0, k);
 }
 
+// Correct Gemini generation API call
 async function generateAnswer(prompt) {
-  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GENERATION_MODEL}:predict`;
+  const url = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT_ID}/locations/${LOCATION}/publishers/google/models/${GENERATION_MODEL}:generateContent`;
   const headers = await getAuthHeaders();
   const res = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      instances: [{ prompt: { text: prompt } }],
-      parameters: { temperature: 0.2, maxOutputTokens: 800 }
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 800 }
     })
   });
+
   const data = await res.json();
-  return data?.predictions?.[0]?.content || data?.predictions?.[0]?.output?.[0]?.content;
+  if (!data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+    console.error("Generation error:", data);
+    throw new Error("Failed to generate answer");
+  }
+  return data.candidates[0].content.parts[0].text;
 }
 
 function incrementChatCount(userId) {
